@@ -39,6 +39,7 @@ HOMEWORK_STATUSES = {
 
 
 def send_message(bot, message):
+    """функция отправки сообщений в телеграм"""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
     except Exception as error:
@@ -46,6 +47,7 @@ def send_message(bot, message):
 
 
 def get_api_answer(current_timestamp):
+    """теперь ответ от API в формате list, а не json"""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     homework = requests.get(ENDPOINT, headers=HEADERS, params=params)
@@ -59,6 +61,7 @@ def get_api_answer(current_timestamp):
 
 
 def check_response(response):
+    """функция возвращает список домашних заданий"""
     if not isinstance(response, dict) or len(response) == 0:
         raise TypeError("ответ API некорректен,"
                         f"ожидается словарь, получено {type(response)}")
@@ -70,6 +73,7 @@ def check_response(response):
 
 
 def parse_status(homework):
+    """возвращает строку для отправки сообщения с нужным комментарием"""
     try:
         homework_name = homework.get('homework_name')
     except Exception:
@@ -84,6 +88,7 @@ def parse_status(homework):
 
 
 def check_tokens():
+    """проверка доступности необходимых переменных окружения"""
     if None in (PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID):
         return False
     return True
