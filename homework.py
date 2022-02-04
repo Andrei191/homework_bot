@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 import time
+from http import HTTPStatus
 
 import requests
 import telegram
@@ -24,14 +25,12 @@ logger.addHandler(handler)
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-
-
 RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
-HOMEWORK_STATUSES = {
+HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
@@ -50,14 +49,21 @@ def get_api_answer(current_timestamp):
     """теперь ответ от API в формате list, а не json."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    homework = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    if homework.status_code != 200:
+    try:
+        homework = requests.get(ENDPOINT, headers=HEADERS, params=params)
+    except Exception as error:
+        logger.error('Сбой в работе программы:'
+                     f'Эндпоинт {ENDPOINT}'
+                     f' недоступен." причина: {error}')
+    if homework.status_code != HTTPStatus.OK:
         raise exceptions.RequestApiError(
-            "Сбой в работе программы:"
-            "Эндпоинт https://practicum.yandex.ru"
-            "/api/user_api/homework_statuses/111"
-            " недоступен.")
-    return homework.json()
+            'Сбой в работе программы:'
+            f'Эндпоинт {ENDPOINT}'
+            ' недоступен.')
+    try:
+        return homework.json()
+    except Exception:
+        logger.error('ошибка функции get_api_answer, ответ API пуст')
 
 
 def check_response(response):
@@ -67,8 +73,7 @@ def check_response(response):
                         f"ожидается словарь, получено {type(response)}")
     homeworks = response.get('homeworks')
     if not isinstance(homeworks, list):
-        raise TypeError("ответ API некорректен,"
-                        f"ожидается список, получено {type(homeworks)}")
+        raise TypeError("ответ API не соответствует ожидаемому")
     return homeworks
 
 
@@ -76,12 +81,16 @@ def parse_status(homework):
     """возвращает строку для отправки сообщения с нужным комментарием."""
     try:
         homework_name = homework.get('homework_name')
-    except Exception:
-        raise TypeError("в словаре д/з нет ключа homework_name")
+        if homework_name is None:
+            raise TypeError("в словаре д/з нет ключа homework_name")
+    except Exception as error:
+        logger.error(f'ошибка функции parse_status: {error}')
     homework_status = homework.get('status')
     if homework_status is None:
         raise TypeError("в словаре д/з нет ключа status")
-    verdict = HOMEWORK_STATUSES.get(homework_status)
+    if homework_status not in HOMEWORK_VERDICTS:
+        raise KeyError("неверный статус ответа")
+    verdict = HOMEWORK_VERDICTS.get(homework_status)
     if verdict is None:
         raise KeyError("неверный статус ответа")
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
@@ -89,7 +98,8 @@ def parse_status(homework):
 
 def check_tokens():
     """проверка доступности необходимых переменных окружения."""
-    if None in (PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID):
+    env_variables = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
+    if not all(env_variables):
         return False
     return True
 
