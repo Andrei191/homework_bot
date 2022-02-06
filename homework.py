@@ -79,13 +79,13 @@ def check_response(response):
 
 def parse_status(homework):
     """возвращает строку для отправки сообщения с нужным комментарием."""
-    try:
-        homework_name = homework.get('homework_name')
-        if homework_name is None:
-            raise TypeError("в словаре д/з нет ключа homework_name")
-    except Exception as error:
-        logger.error(f'ошибка функции parse_status: {error}')
+    if isinstance(homework, list):
+        homework = homework[0]
+    homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
+    if homework_name is None:
+        logger.error("в словаре д/з нет ключа homework_name")
+        raise KeyError("в словаре д/з нет ключа homework_name")
     if homework_status is None:
         raise TypeError("в словаре д/з нет ключа status")
     if homework_status not in HOMEWORK_VERDICTS:
@@ -99,9 +99,7 @@ def parse_status(homework):
 def check_tokens():
     """проверка доступности необходимых переменных окружения."""
     env_variables = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
-    if not all(env_variables):
-        return False
-    return True
+    return all(env_variables)
 
 
 def main():
@@ -114,6 +112,7 @@ def main():
             "переменных окружения отсутствуют")
 
     old_message = ''
+    old_error = ''
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = 1638316800
 
@@ -121,6 +120,7 @@ def main():
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)[0]
+            print(homeworks)
             message = parse_status(homeworks)
             if message != old_message:
                 send_message(bot, message)
@@ -132,9 +132,9 @@ def main():
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(message)
-            if message != old_message:
+            if error != old_error:
                 send_message(bot, message)
-                old_message = message
+                old_error = error
             time.sleep(RETRY_TIME)
 
 
